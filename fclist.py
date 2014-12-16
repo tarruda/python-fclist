@@ -1,8 +1,8 @@
-"""Python cffi bridge to fontconfig's FcFontList."""
+"""Python cffi bridge to fontconfig's FcFontList/FcFontMatch."""
 import cffi
 
 
-__all__ = ('fclist',)
+__all__ = ('fclist', 'fcmatch',)
 
 
 API = '''
@@ -11,17 +11,24 @@ typedef enum {
     FcResultOutOfMemory
 } FcResult;
 
+typedef enum {
+    FcMatchPattern, FcMatchFont, FcMatchScan
+} FcMatchKind;
+
 typedef struct {
     int nfont;
     int sfont;
     void **fonts;
 } FcFontSet;
 
-void *FcInitLoadConfigAndFonts();
+void *FcInitLoadConfigAndFonts(void);
 void *FcNameParse(const char *name);
 char *FcNameUnparse(void *pat);
 void *FcObjectSetBuild(const char *first, ...);
 FcFontSet *FcFontList(void *config, void *pat, void *os);
+bool FcConfigSubstitute(void *config, void *pat, FcMatchKind kind);
+void FcDefaultSubstitute(void *pattern);
+void *FcFontMatch(void *config, void *p, FcResult *result);
 FcResult FcPatternGetBool(const void *pat, const char *object, int n,
                           int *b);
 FcResult FcPatternGetInteger(const void *pat, const char *object, int n,
@@ -143,7 +150,7 @@ class Font(object):
 
 
 def fclist(**query):
-    """Query fontconfig for fonts matching a criteria.
+    """Wrapper for a subset of the fc-list command.
 
     The query should be specified as keyword arguments. Any key that can be
     used in the fc-list command can also be used here. Return an iterator that
@@ -169,3 +176,23 @@ def fclist(**query):
         for key, (ffi_key, extract,) in keys.items():
             extract(fs.fonts[i], key, ffi_key, data, ptrs[extract])
         yield Font(data)
+
+
+def fcmatch(pat_str):
+    """Wrapper for a subset of the fc-match command."""
+    config = ffi.gc(fc.FcInitLoadConfigAndFonts(), fc.FcConfigDestroy)
+    pat = ffi.gc(fc.FcNameParse(pat_str), fc.FcPatternDestroy)
+    fc.FcConfigSubstitute(config, pat, fc.FcMatchPattern)
+    fc.FcDefaultSubstitute(pat)
+    res = ffi.new('FcResult *')
+    font = ffi.gc(fc.FcFontMatch(config, pat, res), fc.FcPatternDestroy)
+    ptrs = {
+        get_bool: ffi.new('int *'),
+        get_int: ffi.new('int *'),
+        get_double: ffi.new('double *'),
+        get_string: ffi.new('char **'),
+    }
+    data = {}
+    for key, (ffi_key, extract,) in keys.items():
+        extract(font, key, ffi_key, data, ptrs[extract])
+    return Font(data)
