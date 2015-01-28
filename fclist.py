@@ -126,13 +126,13 @@ def build_fc_key_table():
     ]
 
     for key in bool_keys:
-        keys[key] = (ffi.new('char[]', key), get_bool,)
+        keys[key] = (ffi.new('char[]', str.encode(key)), get_bool,)
     for key in int_keys:
-        keys[key] = (ffi.new('char[]', key), get_int,)
+        keys[key] = (ffi.new('char[]', str.encode(key)), get_int,)
     for key in double_keys:
-        keys[key] = (ffi.new('char[]', key), get_double,)
+        keys[key] = (ffi.new('char[]', str.encode(key)), get_double,)
     for key in string_keys:
-        keys[key] = (ffi.new('char[]', key), get_string,)
+        keys[key] = (ffi.new('char[]', str.encode(key)), get_string,)
 
 
 build_fc_key_table()
@@ -142,7 +142,10 @@ osb_args = [v[0] for v in keys.values()] + [ffi.NULL]
 class Font(object):
     def __init__(self, data):
         for key in keys.keys():
-            setattr(self, key, data.get(key, None))
+            value = data.get(key, None)
+            if isinstance(value, bytes):
+                value = value.decode()
+            setattr(self, key, value)
         self.style = set(self.style.split())
 
     def __repr__(self):
@@ -159,7 +162,7 @@ def fclist(**query):
     """
     config = ffi.gc(fc.FcInitLoadConfigAndFonts(), fc.FcConfigDestroy)
     pat_str = ''.join([':{0}={1}'.format(k, v) for k, v in query.items()])
-    pat = ffi.gc(fc.FcNameParse(pat_str), fc.FcPatternDestroy)
+    pat = ffi.gc(fc.FcNameParse(str.encode(pat_str)), fc.FcPatternDestroy)
     pat_str = ffi.string(ffi.gc(fc.FcNameUnparse(pat), fc.free))
     if pat_str == '' and len(query):
         raise Exception('Invalid search query')
@@ -181,7 +184,7 @@ def fclist(**query):
 def fcmatch(pat_str):
     """Wrapper for a subset of the fc-match command."""
     config = ffi.gc(fc.FcInitLoadConfigAndFonts(), fc.FcConfigDestroy)
-    pat = ffi.gc(fc.FcNameParse(pat_str), fc.FcPatternDestroy)
+    pat = ffi.gc(fc.FcNameParse(str.encode(pat_str)), fc.FcPatternDestroy)
     fc.FcConfigSubstitute(config, pat, fc.FcMatchPattern)
     fc.FcDefaultSubstitute(pat)
     res = ffi.new('FcResult *')
